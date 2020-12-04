@@ -2,6 +2,7 @@
 
 namespace App\Module\Article\Action;
 
+use App\Module\Article\Constant\ArticleConstant;
 use HyperfPlus\Util\Util;
 use HyperfPlus\Controller\AbstractController;
 use HyperfPlus\Constant\Constant;
@@ -40,6 +41,9 @@ class SearchAction extends AbstractController
         $requestData = $request->all();
         $this->validationFactory->make($requestData, $this->rules)->validate();
         $requestData = Util::sanitize($requestData, $this->rules);
+
+        // 默认取正常状态
+        if (!isset($requestData['status'])) $requestData['status'] = ArticleConstant::ARTICLE_STATUS_NORMAL;
 
         $p      = isset($requestData['p']) ? $requestData['p'] : Constant::DEFAULT_PAGE;
         $size   = isset($requestData['size']) ? $requestData['size'] : Constant::DEFAULT_SIZE;
