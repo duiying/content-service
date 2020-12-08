@@ -2,6 +2,7 @@
 
 namespace App\Module\Article\Logic;
 
+use App\Module\Article\Constant\ArticleConstant;
 use HyperfPlus\Util\Util;
 use Hyperf\Di\Annotation\Inject;
 use App\Module\Article\Service\ArticleService;
@@ -75,5 +76,20 @@ class ArticleLogic
     public function find($requestData)
     {
         return $this->service->getLineByWhere($requestData);
+    }
+
+    /**
+     * 获取需要同步到 ElasticSearch 中的文章数据
+     *
+     * @param int $lastId
+     * @param int $count
+     * @return array
+     */
+    public function getSyncToEsArticleData($lastId = 0, $count = 100)
+    {
+        return $this->service->search([
+            'status'    => ArticleConstant::ARTICLE_STATUS_NORMAL,
+            'id'        => ['>', $lastId]
+        ], 0, $count);
     }
 }
