@@ -15,9 +15,6 @@ use HyperfPlus\Log\Log;
  *
  * @author duiying <wangyaxiandev@gmail.com>
  * @package App\Command
- */
-
-/**
  * @Command
  */
 class SyncMySQLArticleToEs extends HyperfCommand
@@ -56,6 +53,23 @@ class SyncMySQLArticleToEs extends HyperfCommand
         $count  = 100;
 
         $index  = ElasticSearchConst::INDEX_ARTICLE;
+
+        // 删除索引
+        if ($this->es->esClient->indices()->exists(['index' => $index])) {
+            $this->es->esClient->indices()->delete(['index' => $index]);
+        }
+        // 创建索引
+        $this->es->esClient->indices()->create([
+            'index' => $index,
+            'body'  => [
+                'settings' => [
+                    // 主分片数量
+                    'number_of_shards'      => env('ES_NUMBER_OF_SHARDS', 1),
+                    // 副本分片数量
+                    'number_of_replicas'    => env('ES_NUMBER_OF_REPLICAS', 0),
+                ],
+            ],
+        ]);
 
         $articleList = $this->articleLogic->getSyncToEsArticleData($lastId, $count);
 
