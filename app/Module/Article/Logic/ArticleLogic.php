@@ -2,8 +2,10 @@
 
 namespace App\Module\Article\Logic;
 
+use App\Constant\AppErrorCode;
 use App\Constant\ElasticSearchConst;
 use App\Module\Article\Constant\ArticleConstant;
+use HyperfPlus\Exception\AppException;
 use HyperfPlus\Util\Util;
 use Hyperf\Di\Annotation\Inject;
 use App\Module\Article\Service\ArticleService;
@@ -15,6 +17,18 @@ class ArticleLogic
      * @var ArticleService
      */
     private $service;
+
+    /**
+     * 检查 status 字段
+     *
+     * @param $status
+     */
+    public function checkStatus($status)
+    {
+        if (!in_array($status, ArticleConstant::ALLOWED_ARTICLE_STATUS_LIST)) {
+            throw new AppException(AppErrorCode::REQUEST_PARAMS_INVALID, 'status 参数错误！');
+        }
+    }
 
     /**
      * 创建
@@ -50,6 +64,10 @@ class ArticleLogic
     {
         $id = $requestData['id'];
         unset($requestData['id']);
+
+        // 检查 status 字段
+        if (isset($requestData['status'])) $this->checkStatus($requestData['status']);
+
         return $this->service->update(['id' => $id], $requestData);
     }
 
