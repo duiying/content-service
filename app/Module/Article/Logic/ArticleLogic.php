@@ -86,6 +86,12 @@ class ArticleLogic
                         'must'      => [],
                     ]
                 ],
+                'highlight' => [
+                    'require_field_match'   => false,
+                    'fields'                => ['title' => new \stdClass(), 'content' => new \stdClass()],
+                    'pre_tags'              => ["<code>"],
+                    'post_tags'             => ["</code>"],
+                ],
                 'sort' => ['sort' => 'asc', 'ctime' => 'desc']
             ],
             'from' => ($p - 1) * $size,
@@ -112,7 +118,27 @@ class ArticleLogic
         $elasticSearchRes = $this->service->searchByEs($params);
 
         $total  = isset($elasticSearchRes['hits']['total']['value']) ? $elasticSearchRes['hits']['total']['value'] : 0;
-        $list   = isset($elasticSearchRes['hits']['hits']) ? array_column($elasticSearchRes['hits']['hits'], '_source') : [];
+        $list   = [];
+
+        if (isset($elasticSearchRes['hits']['hits'])) {
+            foreach ($elasticSearchRes['hits']['hits'] as $k => $v) {
+                $tmpArticle                         = $v['_source'];
+                $tmpArticle['title']                = strip_tags($tmpArticle['title']);
+                $tmpArticle['content']              = strip_tags($tmpArticle['content']);
+
+                // 高亮逻辑
+                $tmpArticle['highlight_content']    = '';
+                $tmpArticle['highlight_title']      = '';
+                if (isset($v['highlight']['content']) && !empty($v['highlight']['content'])) {
+                    $tmpArticle['highlight_content'] = strip_tags($v['highlight']['content'][0], '<code>');
+                }
+                if (isset($v['highlight']['title']) && !empty($v['highlight']['title'])) {
+                    $tmpArticle['highlight_title'] = strip_tags($v['highlight']['title'][0], '<code>');
+                }
+
+                $list[] = $tmpArticle;
+            }
+        }
 
         return Util::formatSearchRes($p, $size, $total, $list);
     }
