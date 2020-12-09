@@ -18,6 +18,8 @@ class ArticleLogic
      */
     private $service;
 
+    private $sort = ['sort' => 'asc', 'ctime' => 'desc'];
+
     /**
      * 检查 status 字段
      *
@@ -38,7 +40,11 @@ class ArticleLogic
      */
     public function create($requestData)
     {
-        return $this->service->create($requestData);
+        $id = $this->service->create($requestData);
+
+        $this->service->createEsArticle($id);
+
+        return $id;
     }
 
     /**
@@ -51,7 +57,12 @@ class ArticleLogic
     {
         $id = $requestData['id'];
         unset($requestData['id']);
-        return $this->service->update(['id' => $id], $requestData);
+
+        $updateRes = $this->service->update(['id' => $id], $requestData);
+
+        $this->service->updateEsArticle($id);
+
+        return $updateRes;
     }
 
     /**
@@ -68,6 +79,8 @@ class ArticleLogic
         // 检查 status 字段
         if (isset($requestData['status'])) $this->checkStatus($requestData['status']);
 
+        if ($requestData['status'] == ArticleConstant::ARTICLE_STATUS_DELETE) $this->service->deleteEsArticle($id);
+
         return $this->service->update(['id' => $id], $requestData);
     }
 
@@ -81,6 +94,17 @@ class ArticleLogic
      */
     public function search($requestData, $p, $size)
     {
+        // 查库
+        if (!isset($requestData['keywords']) || empty($requestData['keywords'])) {
+            $list   = $this->service->search($requestData, $p, $size, ['*'], $this->sort);
+            $total  = $this->service->count($requestData);
+            foreach ($list as $k => $v) {
+                $list[$k]['highlight_title']    = '';
+                $list[$k]['highlight_content']  = '';
+            }
+            return Util::formatSearchRes($p, $size, $total, $list);
+        }
+
         // 通过 ElasticSearch 搜索
         return $this->searchByEs($requestData, $p, $size);
     }
@@ -110,7 +134,7 @@ class ArticleLogic
                     'pre_tags'              => ["<code>"],
                     'post_tags'             => ["</code>"],
                 ],
-                'sort' => ['sort' => 'asc', 'ctime' => 'desc']
+                'sort' => $this->sort
             ],
             'from' => ($p - 1) * $size,
             'size' => $size,

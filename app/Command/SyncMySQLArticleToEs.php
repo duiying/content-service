@@ -4,6 +4,7 @@ namespace App\Command;
 
 use App\Constant\ElasticSearchConst;
 use App\Module\Article\Logic\ArticleLogic;
+use App\Module\Article\Service\ArticleService;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Di\Annotation\Inject;
 use HyperfPlus\Elasticsearch\ElasticSearch;
@@ -32,6 +33,12 @@ class SyncMySQLArticleToEs extends HyperfCommand
     private $articleLogic;
 
     /**
+     * @Inject()
+     * @var ArticleService
+     */
+    private $articleService;
+
+    /**
      * 执行的命令行（php bin/hyperf.php sync:mysql:article:to:es）
      *
      * @var string
@@ -55,19 +62,11 @@ class SyncMySQLArticleToEs extends HyperfCommand
         $index  = ElasticSearchConst::INDEX_ARTICLE;
 
         // 删除索引
-        if ($this->es->esClient->indices()->exists(['index' => $index])) {
-            $this->es->esClient->indices()->delete(['index' => $index]);
+        if ($this->articleService->existsEsArticleIndex()) {
+            $this->articleService->deleteEsArticleIndex();
         }
         // 创建索引
-        $this->es->esClient->indices()->create([
-            'index' => $index,
-            'body'  => [
-                'settings' => ElasticSearchConst::INDEX_ARTICLE_SETTINGS,
-                'mappings' => [
-                    'properties' => ElasticSearchConst::INDEX_ARTICLE_MAPPINGS
-                ],
-            ],
-        ]);
+        $this->articleService->createEsArticleIndex();
 
         $articleList = $this->articleLogic->getSyncToEsArticleData($lastId, $count);
 
