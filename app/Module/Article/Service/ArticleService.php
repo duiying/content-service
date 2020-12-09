@@ -4,6 +4,7 @@ namespace App\Module\Article\Service;
 
 use Hyperf\Di\Annotation\Inject;
 use App\Module\Article\Dao\ArticleDao;
+use HyperfPlus\Elasticsearch\ElasticSearch;
 
 class ArticleService
 {
@@ -12,6 +13,12 @@ class ArticleService
      * @var ArticleDao
      */
     private $dao;
+
+    /**
+     * @Inject()
+     * @var ElasticSearch
+     */
+    private $es;
 
     /**
      * 开启事务
@@ -97,5 +104,16 @@ class ArticleService
     public function count($where = [])
     {
         return $this->dao->count($where);
+    }
+
+    /**
+     * 通过 ElasticSearch 搜索
+     *
+     * @param $params
+     * @return array|callable
+     */
+    public function searchByEs($params)
+    {
+        return $this->es->esClient->search($params);
     }
 }

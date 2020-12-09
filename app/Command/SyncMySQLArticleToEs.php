@@ -62,11 +62,9 @@ class SyncMySQLArticleToEs extends HyperfCommand
         $this->es->esClient->indices()->create([
             'index' => $index,
             'body'  => [
-                'settings' => [
-                    // 主分片数量
-                    'number_of_shards'      => env('ES_NUMBER_OF_SHARDS', 1),
-                    // 副本分片数量
-                    'number_of_replicas'    => env('ES_NUMBER_OF_REPLICAS', 0),
+                'settings' => ElasticSearchConst::INDEX_ARTICLE_SETTINGS,
+                'mappings' => [
+                    'properties' => ElasticSearchConst::INDEX_ARTICLE_MAPPINGS
                 ],
             ],
         ]);

@@ -2,6 +2,7 @@
 
 namespace App\Module\Article\Logic;
 
+use App\Constant\ElasticSearchConst;
 use App\Module\Article\Constant\ArticleConstant;
 use HyperfPlus\Util\Util;
 use Hyperf\Di\Annotation\Inject;
@@ -62,8 +63,57 @@ class ArticleLogic
      */
     public function search($requestData, $p, $size)
     {
-        $list  = $this->service->search($requestData, $p, $size);
-        $total = $this->service->count($requestData);
+        // 通过 ElasticSearch 搜索
+        return $this->searchByEs($requestData, $p, $size);
+    }
+
+    /**
+     * 通过 ElasticSearch 搜索
+     *
+     * @param $requestData
+     * @param $p
+     * @param $size
+     * @return array
+     */
+    public function searchByEs($requestData, $p, $size)
+    {
+        $params = [
+            'index' => ElasticSearchConst::INDEX_ARTICLE,
+            'body'  => [
+                'query' => [
+                    'bool' => [
+                        'filter'    => [],
+                        'must'      => [],
+                    ]
+                ],
+                'sort' => ['sort' => 'asc', 'ctime' => 'desc']
+            ],
+            'from' => ($p - 1) * $size,
+            'size' => $size,
+        ];
+
+        if (isset($requestData['keywords']) && !empty($requestData['keywords'])) {
+            $keywordList = array_filter(explode(' ', $requestData['keywords']));
+
+            foreach ($keywordList as $k => $v) {
+                $params['body']['query']['bool']['must'][] = [
+                    'multi_match' => [
+                        'query'     => $v,
+                        'fields'    => ['title', 'content'],
+                    ]
+                ];
+            }
+        }
+
+        if (isset($requestData['status'])) {
+            $params['body']['query']['bool']['filter'][] = ['term' => ['status' => $requestData['status']]];
+        }
+
+        $elasticSearchRes = $this->service->searchByEs($params);
+
+        $total  = isset($elasticSearchRes['hits']['total']['value']) ? $elasticSearchRes['hits']['total']['value'] : 0;
+        $list   = isset($elasticSearchRes['hits']['hits']) ? array_column($elasticSearchRes['hits']['hits'], '_source') : [];
+
         return Util::formatSearchRes($p, $size, $total, $list);
     }
 
