@@ -4,10 +4,11 @@ namespace App\Module\Article\Service;
 
 use App\Constant\ElasticSearchConst;
 use App\Module\Article\Constant\ArticleConstant;
+use App\RabbitMQ\Article\ArticleSyncProducer;
+use Hyperf\Amqp\Producer;
 use Hyperf\Di\Annotation\Inject;
 use App\Module\Article\Dao\ArticleDao;
 use HyperfPlus\Elasticsearch\ElasticSearch;
-use HyperfPlus\Log\Log;
 
 class ArticleService
 {
@@ -22,6 +23,12 @@ class ArticleService
      * @var ElasticSearch
      */
     private $es;
+
+    /**
+     * @Inject()
+     * @var Producer
+     */
+    private $producer;
 
     /**
      * 开启事务
@@ -124,17 +131,19 @@ class ArticleService
      * 删除 ElasticSearch 中 Article 文档
      *
      * @param $id
+     * @return bool
      */
     public function deleteEsArticle($id)
     {
-        try {
-            $this->es->esClient->delete([
-                'index'     => ElasticSearchConst::INDEX_ARTICLE,
-                'id'        => $id,
-            ]);
-        } catch (\Exception $exception) {
-            Log::error('删除 ES Article 文档失败', ['code' => $exception->getCode(), 'msg' => $exception->getMessage(), 'id' => $id]);
-        }
+        // 如果文档不存在，直接返回
+        if (!$this->existsEsArticle($id)) return false;
+
+        $this->es->esClient->delete([
+            'index'     => ElasticSearchConst::INDEX_ARTICLE,
+            'id'        => $id,
+        ]);
+
+        return true;
     }
 
     /**
@@ -167,18 +176,13 @@ class ArticleService
             return $this->createEsArticle($id);
         }
 
-        try {
-            $this->es->esClient->update([
-                'index'     => ElasticSearchConst::INDEX_ARTICLE,
-                'id'        => $id,
-                'body'      => [
-                    'doc' => $article,
-                ],
-            ]);
-        } catch (\Exception $exception) {
-            Log::error('更新 ES Article 文档失败', ['code' => $exception->getCode(), 'msg' => $exception->getMessage(), 'id' => $id]);
-            return false;
-        }
+        $this->es->esClient->update([
+            'index'     => ElasticSearchConst::INDEX_ARTICLE,
+            'id'        => $id,
+            'body'      => [
+                'doc' => $article,
+            ],
+        ]);
 
         return true;
     }
@@ -199,16 +203,11 @@ class ArticleService
             $this->createEsArticleIndex();
         }
 
-        try {
-            $this->es->esClient->create([
-                'index'     => ElasticSearchConst::INDEX_ARTICLE,
-                'id'        => $id,
-                'body'      => $article
-            ]);
-        } catch (\Exception $exception) {
-            Log::error('创建 ES Article 文档失败', ['code' => $exception->getCode(), 'msg' => $exception->getMessage(), 'id' => $id]);
-            return false;
-        }
+        $this->es->esClient->create([
+            'index'     => ElasticSearchConst::INDEX_ARTICLE,
+            'id'        => $id,
+            'body'      => $article
+        ]);
 
         return true;
     }
@@ -247,5 +246,19 @@ class ArticleService
     public function deleteEsArticleIndex()
     {
         return $this->es->esClient->indices()->delete(['index' => ElasticSearchConst::INDEX_ARTICLE]);
+    }
+
+    /**
+     * 向 RabbitMQ 投递消息
+     *
+     * @param $id
+     * @param $actionType
+     */
+    public function produceToRabbitMQ($id, $actionType)
+    {
+        $this->producer->produce(new ArticleSyncProducer([
+            'id'            => $id,
+            'action_type'   => $actionType
+        ]));
     }
 }

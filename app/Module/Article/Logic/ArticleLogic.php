@@ -42,7 +42,8 @@ class ArticleLogic
     {
         $id = $this->service->create($requestData);
 
-        $this->service->createEsArticle($id);
+        // 向 RabbitMQ 投递消息
+        $this->service->produceToRabbitMQ($id, ArticleConstant::ACTION_TYPE_CREATE);
 
         return $id;
     }
@@ -60,7 +61,8 @@ class ArticleLogic
 
         $updateRes = $this->service->update(['id' => $id], $requestData);
 
-        $this->service->updateEsArticle($id);
+        // 向 RabbitMQ 投递消息
+        $this->service->produceToRabbitMQ($id, ArticleConstant::ACTION_TYPE_UPDATE);
 
         return $updateRes;
     }
@@ -79,7 +81,10 @@ class ArticleLogic
         // 检查 status 字段
         if (isset($requestData['status'])) $this->checkStatus($requestData['status']);
 
-        if ($requestData['status'] == ArticleConstant::ARTICLE_STATUS_DELETE) $this->service->deleteEsArticle($id);
+        if ($requestData['status'] == ArticleConstant::ARTICLE_STATUS_DELETE) {
+            // 向 RabbitMQ 投递消息
+            $this->service->produceToRabbitMQ($id, ArticleConstant::ACTION_TYPE_DELETE);
+        }
 
         return $this->service->update(['id' => $id], $requestData);
     }
@@ -94,7 +99,15 @@ class ArticleLogic
      */
     public function search($requestData, $p, $size)
     {
-        // 查库
+        /**
+         * 为什么不能直接从 ElasticSearch 中进行查询呢？
+         * 因为现在的流程是通过 RabbitMQ 异步将 MySQL 中的文章数据写进 ElasticSearch，如果直接读 ElasticSearch，当创建完文章以后，这篇刚创建完的文章在文章列表暂时展示不出来，会有短暂的延迟
+         * 因此，无查询条件的时候走查 MySQL 逻辑，存在查询条件的时候走 ElasticSearch 逻辑，这样「大概率」保证了刚创建完的文章，回到文章列表的时候，能够将刚创建的文章展示出来
+         * 为什么是「大概率」呢？
+         * 如果是主从复制的模式下，先写后查，写主查从，会存在主从延迟的情况
+         */
+
+        // 通过 MySQL 查询
         if (!isset($requestData['keywords']) || empty($requestData['keywords'])) {
             $list   = $this->service->search($requestData, $p, $size, ['*'], $this->sort);
             $total  = $this->service->count($requestData);
@@ -105,12 +118,12 @@ class ArticleLogic
             return Util::formatSearchRes($p, $size, $total, $list);
         }
 
-        // 通过 ElasticSearch 搜索
+        // 通过 ElasticSearch 查询
         return $this->searchByEs($requestData, $p, $size);
     }
 
     /**
-     * 通过 ElasticSearch 搜索
+     * 通过 ElasticSearch 查询
      *
      * @param $requestData
      * @param $p
